@@ -1,38 +1,57 @@
-import re
-
-
 class MemoryManager:
     def __init__(self, allocator):
         self.allocator = allocator
-    
+        
     def allocate(self, process, request_size):
         memory_view = self.allocator.memory_view()
-
-        # You need to complete the code here. 
-
-        # The input of this function contains two parameters: 
-        #   process -- the process requesting memory, you don't need to
-        #              do anything for process, just pass it to the 
-        #              'self.allocator.allocate_memory' function at the 
-        #              end of this function.
-        #   request_size -- an integer indicating how many memory blocks 
-        #                   this process requests.
-
-        # The first line returns 'memory_view', a list of memory blocks.
-        # If a memory block is free, the corresponding item of the list
-        # will be None, otherwise the item will be the process object.
+        n = len(memory_view)
         
-        # The total size of the memory is 256 blocks.
+        if not self.try_allocate(memory_view, process, request_size):
+            # If allocation fails, attempt to reallocate all memory
+            self.reallocate_all_memory()
+            # Try allocation again after reallocation
+            memory_view = self.allocator.memory_view()  # Refresh the memory view
+            return self.try_allocate(memory_view, process, request_size)
+        return True
 
-        # You need to decide which memory to allocate to the process based
-        # on 'memory_view' and 'request_size'. When you make a decision, 
-        # pass the starting address of the memory (i.e. 'block_start')
-        # along with 'request_size' and 'process' to the function
-        # 'self.allocator.allocate_memory' (see below).
+    def try_allocate(self, memory_view, process, request_size):
+        current_start = None
+        current_size = 0
+        for i in range(len(memory_view)):
+            if memory_view[i] is None:  # Free block
+                if current_start is None:
+                    current_start = i  # Start of a new free block sequence
+                current_size += 1
+            else:
+                if current_size >= request_size:  # Found a suitable block
+                    self.allocator.allocate_memory(current_start, request_size, process)
+                    return True
+                current_start = None
+                current_size = 0
 
-        # Memory blocks will be automatically reclaimed according to 
-        # the definition in the process objects.
+        if current_size >= request_size:
+            self.allocator.allocate_memory(current_start, request_size, process)
+            return True
+        
+        return False
 
-        self.allocator.allocate_memory(block_start, request_size, process)
+    def reallocate_all_memory(self):
+        memory_view = self.allocator.memory_view()
+        processes = []
+        
+        # Free all processes and store them
+        for i in range(len(memory_view)):
+            if memory_view[i] is not None and memory_view[i] not in processes:
+                processes.append(memory_view[i])
+                self.allocator.free_memory(memory_view[i])
+
+        # Reallocate memory from the start
+        current_position = 0
+        for proc in processes:
+            self.allocator.allocate_memory(current_position, proc.block, proc)
+            current_position += proc.block
+
+        # This will result in a compacted memory view
+
 
 
